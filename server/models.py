@@ -2,7 +2,7 @@
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
-from sqlalchemy_serializer import SerializerMixin
+from sqlalchemy_serializer import SerializerMixin  # Added this
 from sqlalchemy.ext.associationproxy import association_proxy
 
 metadata = MetaData(
@@ -14,8 +14,11 @@ metadata = MetaData(
 db = SQLAlchemy(metadata=metadata)
 
 
-class Game(db.Model):
+class Game(db.Model, SerializerMixin): # Added SerializerMixin
     __tablename__ = "games"
+
+    # Rule: Get reviews, but don't let reviews try to load the game again (prevents loops)
+    serialize_rules = ("-reviews.game",)
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String, unique=True)
@@ -27,12 +30,19 @@ class Game(db.Model):
 
     reviews = db.relationship("Review", back_populates="game")
 
+    # Association proxy to get users for this game through reviews
+    users = association_proxy("reviews", "user",
+                              creator=lambda user_obj: Review(user=user_obj))
+
     def __repr__(self):
         return f"<Game {self.title} for {self.platform}>"
 
 
-class Review(db.Model):
+class Review(db.Model, SerializerMixin): # Added SerializerMixin
     __tablename__ = "reviews"
+
+    # Rule: Don't let the game or user inside the review try to load more reviews
+    serialize_rules = ("-game.reviews", "-user.reviews",)
 
     id = db.Column(db.Integer, primary_key=True)
     score = db.Column(db.Integer)
@@ -50,8 +60,11 @@ class Review(db.Model):
         return f"<Review ({self.id}) of {self.game}: {self.score}/10>"
 
 
-class User(db.Model):
+class User(db.Model, SerializerMixin): # Added SerializerMixin
     __tablename__ = "users"
+
+    # Rule: Get the user's reviews, but don't let the review try to load the user back
+    serialize_rules = ("-reviews.user",)
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
